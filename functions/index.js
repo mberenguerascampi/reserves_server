@@ -71,6 +71,15 @@ var validateDates = function(horaIni1, horaFi1, horaIni2, horaFi2){
 			moreOrEqual(horaIni1, horaFi2)) //horaIni1 >= horaFi2
 };
 
+var getNotUndefinedValue = function(value){
+  return value != undefined ? value : "";
+}
+
+var getToken = function(headers){
+  var idToken = headers["authorization"];
+  if(idToken !== undefined) idToken = idToken.replace("Bearer ","");
+  return idToken;
+};
 
 // Adds a reservation to Realtime Database
 exports.addReservation = functions.https.onRequest((req, res) => {
@@ -83,11 +92,7 @@ exports.addReservation = functions.https.onRequest((req, res) => {
   }
 
   var body = req.body;
-  const headers = req.headers;
-  console.log(headers);
-  var idToken = headers["authorization"];
-  if(idToken !== undefined) idToken = idToken.replace("Bearer ","");
-  console.log(idToken);
+  var idToken = getToken(req.headers); 
 
   //Validem el token de l'ususuari
   admin.auth().verifyIdToken(idToken).then(function(decodedToken) {
@@ -157,6 +162,40 @@ exports.createUser = functions.auth.user().onCreate((event) => {
   });
 
   return console.log('User created');
+});
+
+exports.editUser = functions.https.onRequest((req, res) => {
+  cors(req, res, () => {});
+
+  if (req.method != "POST") {
+     res.status(400).send("Only POST request is available");
+     return;
+  }
+
+  var body = req.body;
+  var idToken = getToken(req.headers); 
+
+  //Validem el token de l'ususuari
+  admin.auth().verifyIdToken(idToken).then((decodedToken) => {
+    console.log("verifyIdToken");
+    var uid = decodedToken.uid;
+    var email = decodedToken.email;
+
+    var userRef = admin.database().ref("/users/" + uid);
+    userRef.once("value", (snapshot) => {
+      var savedUser = snapshot.val()
+      console.log("inside value");
+      savedUser["email"] = getNotUndefinedValue(body["email"]);
+      savedUser["displayName"] = getNotUndefinedValue(body["displayName"]);
+      savedUser["phone"] = getNotUndefinedValue(body["phone"]);
+
+      userRef.set(savedUser).then((result) => {
+        res.status(200).send("success");
+      });
+    });
+  }).catch(function(error) {
+    res.status(400).send("Invalid auth");
+  });
 });
 
 // Sends a welcome email to the given user.
